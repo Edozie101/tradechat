@@ -2,6 +2,7 @@
 
 
 # Using Flask and SQLite3
+import os
 import datetime as  dt
 from sqlite3 import dbapi2 as sqlite3
 from flask import Flask,request,session,g,redirect,url_for,abort, render_template ,\
@@ -15,15 +16,13 @@ from flask import Flask,request,session,g,redirect,url_for,abort, render_templat
 
 #The application object from the main Flask class
 app = Flask(__name__)
-
-
 #time for some config , we need a database file name
 
 app.config.update(dict(
-    DATABASE=os.path.join(app.root_path,'tradechat.db');
+    DATABASE=os.path.join(app.root_path,'tradechat.db'),
     #Set the sqlite3 database file ("TC database")
-    DEBUG=True
-    SECRET_KEY='secret_key',
+    DEBUG=True,
+    SECRET_KEY='secret_key'
         #Im gonna place a secure key here for the actual application
 
 ))
@@ -59,7 +58,7 @@ def get_db():
 
 def init_db():
     # creates the TC database tables
-    with app.app_context()
+    with app.app_context():
         #we are getting the connection object
         db = get_db()
         # here we are opening the database and abstracting it as f
@@ -72,7 +71,7 @@ def init_db():
 #The function close_db closes the database connection if there is one
 
 def close_db():
-    if  hasattr(g, 'sqlite_db')
+    if  hasattr(g, 'sqlite_db'):
         g.sqlite_db.close()
 
 
@@ -111,3 +110,58 @@ def register():
             app.config.update(dict(USERNAME=request.form['username']))
             return redirect(url_for('show_entries'))
     return render_template('register.htnl', error=error)
+
+@app.route('/login', methods=['GET','POST'])
+def login():
+ 	error = None
+ 	if request.method=="POST":
+ 		db = get_db()
+ 		try:
+ 			query = 'select id from users where name = ? and password = ?'
+ 			#request.form takes a key which leads to the value in an element
+ 			db.execute(query,(request.form['username'],request.form['password'])).fetchone()[0]
+ 			#fails if record provided with username and password is not found
+ 			session['logged_in'] = True
+ 			flash('You are now logged in.')
+ 			app.config.update(dict(USERNAME=request.form['username']))
+ 			return redirect(url_for('show_entries'))
+ 		except:
+ 		    error = 'User not found or wrong password'
+ 		return render_template('login.html', error=error)
+
+
+@app.route('/add', methods=['POST'])
+def add():
+	error = None
+	#checks if they are logged in
+	if not session.get('logged_in'):
+
+		abort(401)
+	#proceeds to perform procedure , get the db , execute a query then commit to db,
+	# note changes on flash , then return the urlfor the showentries
+	db = get_db()
+	now = dt.datetime.now
+	db.execute('insert into comments (comment, user, time) values (?, ?, ?)',
+				[request.form['text'], app.config['USERNAME'], str(now)[:-7]])
+	db.commit()
+	flash('Comment succefulty added')
+	return redirect(url_for('show_entries'))
+
+
+@app.route('/logout')
+def logout():
+	session.pop('logged_in', None)
+	flash('You were logged out')
+	return redirect(url_for('show_entries'))
+
+
+
+
+# if we want to make this standalone we need to add these lines to the application so that there
+# is a server fired up  and that the application is served
+
+#main routine
+
+if __name__ == "__main__":
+    init_db()
+    app.run()
